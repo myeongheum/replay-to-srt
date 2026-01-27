@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>대회준비반 Dropbox Replay → SRT 변환기 v2.0</title>
+    <title>대회준비반 Dropbox Replay → SRT 변환기</title>
     <style>
         * {
             box-sizing: border-box;
@@ -73,7 +73,7 @@
         
         .option-group {
             flex: 1;
-            min-width: 200px;
+            min-width: 150px;
         }
         
         label {
@@ -183,7 +183,7 @@
     </style>
 </head>
 <body>
-    <h1>📝 대회준비반 뽜이야 Dropbox Replay → SRT 변환기</h1>
+    <h1>📝 대회준비반 뽜이야 Dropbox Replay → SRT 변환기 v2.0</h1>
     <p class="subtitle">Dropbox Replay 피드백 JSON을 SRT 자막 파일로 변환합니다</p>
     
     <div class="card">
@@ -201,6 +201,10 @@
             <div class="option-group">
                 <label for="duration">자막 표시 시간 (초)</label>
                 <input type="number" id="duration" value="5" min="1" max="30" step="0.5">
+            </div>
+            <div class="option-group">
+                <label for="replyDelay">답글 지연 시간 (초)</label>
+                <input type="number" id="replyDelay" value="1.5" min="0" max="10" step="0.5">
             </div>
             <div class="option-group">
                 <label>&nbsp;</label>
@@ -238,17 +242,21 @@
             return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')},${String(millis).padStart(3, '0')}`;
         }
         
-        // Replay JSON 파싱 (모든 코멘트 처리)
-        function parseReplayJson(data, duration, includeAuthor) {
+        // Replay JSON 파싱 (모든 코멘트 처리, 답글 지연)
+        function parseReplayJson(data, duration, includeAuthor, replyDelay) {
             const subtitles = [];
             
             for (const item of data) {
                 const comments = item.comments || [];
                 
                 // 모든 코멘트를 순회 (답글 포함)
-                for (const comment of comments) {
+                for (let i = 0; i < comments.length; i++) {
+                    const comment = comments[i];
+                    const isReply = i > 0; // 첫 번째가 아니면 답글
+                    
                     const timeRange = comment.timeRange || {};
-                    const startTime = timeRange.in || 0;
+                    // 답글인 경우 지연 시간 추가
+                    const startTime = (timeRange.in || 0) + (isReply ? replyDelay : 0);
                     
                     let content = (comment.content || '').trim();
                     const hasDrawing = 'drawingJSON' in comment;
@@ -266,7 +274,9 @@
                     
                     if (includeAuthor) {
                         const authorName = comment.author?.displayName || '알 수 없음';
-                        text = `[${authorName}] ${text}`;
+                        // 답글인 경우 들여쓰기 표시
+                        const prefix = isReply ? '  ↳ ' : '';
+                        text = `${prefix}[${authorName}] ${text}`;
                     }
                     
                     subtitles.push({
@@ -305,6 +315,7 @@
             for (const event of events) {
                 // 이전 구간에 활성 자막이 있었으면 저장
                 if (prevTime !== null && prevTime < event.time && active.size > 0) {
+                    // 시작 시간 순으로 정렬하여 원본이 위, 답글이 아래로
                     const texts = [...active]
                         .sort((a, b) => subtitles[a].start - subtitles[b].start)
                         .map(idx => subtitles[idx].text);
@@ -372,9 +383,10 @@
                     }
                     
                     const duration = parseFloat(document.getElementById('duration').value) || 5;
+                    const replyDelay = parseFloat(document.getElementById('replyDelay').value) || 1.5;
                     const includeAuthor = document.getElementById('includeAuthor').checked;
                     
-                    const subtitles = parseReplayJson(data, duration, includeAuthor);
+                    const subtitles = parseReplayJson(data, duration, includeAuthor, replyDelay);
                     
                     if (subtitles.length === 0) {
                         error.textContent = '❌ 변환할 코멘트를 찾을 수 없습니다.';
@@ -447,6 +459,10 @@
         
         // 옵션 변경 시 재처리
         document.getElementById('duration').addEventListener('change', () => {
+            if (fileInput.files[0]) processFile(fileInput.files[0]);
+        });
+        
+        document.getElementById('replyDelay').addEventListener('change', () => {
             if (fileInput.files[0]) processFile(fileInput.files[0]);
         });
         
