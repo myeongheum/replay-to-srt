@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>대회준비반 Dropbox Replay → SRT 변환기</title>
+    <title>대회준비반 Dropbox Replay → SRT 변환기 v2.0</title>
     <style>
         * {
             box-sizing: border-box;
@@ -238,42 +238,43 @@
             return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')},${String(millis).padStart(3, '0')}`;
         }
         
-        // Replay JSON 파싱
+        // Replay JSON 파싱 (모든 코멘트 처리)
         function parseReplayJson(data, duration, includeAuthor) {
             const subtitles = [];
             
             for (const item of data) {
                 const comments = item.comments || [];
-                if (comments.length === 0) continue;
                 
-                const comment = comments[0];
-                const timeRange = comment.timeRange || {};
-                const startTime = timeRange.in || 0;
-                
-                let content = (comment.content || '').trim();
-                const hasDrawing = 'drawingJSON' in comment;
-                
-                if (!content && !hasDrawing) continue;
-                
-                let text;
-                if (content) {
-                    text = content;
-                } else if (hasDrawing) {
-                    text = '(그림 주석)';
-                } else {
-                    continue;
+                // 모든 코멘트를 순회 (답글 포함)
+                for (const comment of comments) {
+                    const timeRange = comment.timeRange || {};
+                    const startTime = timeRange.in || 0;
+                    
+                    let content = (comment.content || '').trim();
+                    const hasDrawing = 'drawingJSON' in comment;
+                    
+                    if (!content && !hasDrawing) continue;
+                    
+                    let text;
+                    if (content) {
+                        text = content;
+                    } else if (hasDrawing) {
+                        text = '(그림 주석)';
+                    } else {
+                        continue;
+                    }
+                    
+                    if (includeAuthor) {
+                        const authorName = comment.author?.displayName || '알 수 없음';
+                        text = `[${authorName}] ${text}`;
+                    }
+                    
+                    subtitles.push({
+                        start: startTime,
+                        end: startTime + duration,
+                        text: text
+                    });
                 }
-                
-                if (includeAuthor) {
-                    const authorName = comment.author?.displayName || '알 수 없음';
-                    text = `[${authorName}] ${text}`;
-                }
-                
-                subtitles.push({
-                    start: startTime,
-                    end: startTime + duration,
-                    text: text
-                });
             }
             
             subtitles.sort((a, b) => a.start - b.start);
